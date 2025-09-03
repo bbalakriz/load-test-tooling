@@ -1,10 +1,15 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-API_BASE="http://localhost:5237/checkin/v1/journeys/retrieve"
-AUTH_URL="https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token"
-TMP_TOKEN_FILE=".token.json"
-RESULTS_FILE="siege-results.log"
+API_BASE="${API_BASE:-http://localhost:5237/checkin/v1/journeys/retrieve}"
+AUTH_URL="${AUTH_URL:-https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token}"
+TMP_TOKEN_FILE="${TMP_TOKEN_FILE:-.token.json}"
+RESULTS_FILE="${RESULTS_FILE:-logs/siege-results.log}"
+PAYLOAD_GLOB="${PAYLOAD_GLOB:-payloads/payload*.json}"
+SIEGE_CONCURRENCY="${SIEGE_CONCURRENCY:-10}"
+SIEGE_REPEATS="${SIEGE_REPEATS:-3}"
+
+mkdir -p "$(dirname "$RESULTS_FILE")"
 
 # Step 1. Fetch token
 echo "[INFO] Fetching API token..."
@@ -25,18 +30,26 @@ echo "[INFO] Token retrieved successfully."
 echo "[INFO] Starting siege tests..."
 rm -f "$RESULTS_FILE"
 
-for f in payload*.json; do
+shopt -s nullglob
+found=false
+for f in $PAYLOAD_GLOB; do
+  found=true
   echo "[INFO] Testing $f ..."
-  siege -c40 -r3 \
+  siege -c"$SIEGE_CONCURRENCY" -r"$SIEGE_REPEATS" \
     --header="Accept: application/json" \
     --header="Authorization: Bearer $TOKEN" \
     --header="Content-Type: application/json" \
     "$API_BASE POST <$f" 2>&1 | tee -a "$RESULTS_FILE"
 done
+shopt -u nullglob
+if [[ "$found" == false ]]; then
+  echo "[WARN] No payloads found matching pattern: $PAYLOAD_GLOB"
+fi
 
 # Step 3. Extract benchmark stats
 echo
 echo "========== Benchmark Results =========="
 grep -E "Transactions|Availability|Elapsed time|Data transferred|Response time|Transaction rate|Throughput|Concurrency|Successful transactions|Failed transactions" "$RESULTS_FILE" || echo "[WARN] No benchmark stats found."
 echo "======================================="
+
 

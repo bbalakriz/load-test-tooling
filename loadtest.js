@@ -5,19 +5,19 @@ import { SharedArray } from 'k6/data';
 // ==== Step 1. Load payloads once ====
 const payloads = new SharedArray('payloads', function () {
   const arr = [];
-  for (let i = 1; i <= 100; i++) {   // adjust max payload number
+  for (let i = 1; i <= 100; i++) {
     try {
-      const data = open(`./payload${i}.json`);
-      arr.push(data.replace(/\n/g, ''));  // flatten JSON
+      const data = open(`./payloads/payload${i}.json`);
+      arr.push(data.replace(/\n/g, ''));
     } catch (e) {
-      break; // stop if file not found
+      break;
     }
   }
   return arr;
 });
 
 const authUrl = 'https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token';
-const apiBase = 'http://localhost:5237/checkin/v1/journeys/retrieve';
+const apiBase = 'http://host.containers.internal:5237/checkin/v1/journeys/retrieve';
 
 // ==== Step 2. Setup (runs once before test) ====
 export function setup() {
@@ -37,7 +37,7 @@ export function setup() {
     throw new Error(`Auth response is not JSON: ${res.body}`);
   }
 
-  const token = body?.data?.token;
+  const token = body && body.data && body.data.token;
   if (!token) {
     throw new Error(`No token found in response: ${res.body}`);
   }
@@ -46,14 +46,13 @@ export function setup() {
   return { token };
 }
 
-
 // ==== Step 3. Load test options (like siege) ====
 export const options = {
-  vus: 100,             // like siege -c40
-  duration: '60s',     // like siege -t30s
+  vus: 11,
+  duration: '60s',
   thresholds: {
-    http_req_failed: ['rate<0.01'],      // <1% errors
-    http_req_duration: ['p(99)<1000'],   // 95% <2s
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(99)<1000'],
   },
 };
 
@@ -74,3 +73,5 @@ export default function (data) {
 
   sleep(0.1);
 }
+
+

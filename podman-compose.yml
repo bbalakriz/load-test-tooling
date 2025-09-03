@@ -1,0 +1,22 @@
+version: "3.8"
+services:
+  loadtest:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: quay.io/balki404/load-test:latest
+    container_name: loadtest
+    volumes:
+      - ./:/work:Z
+    working_dir: /work
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    command: ["help"]
+    environment:
+      # Override these as needed
+      - API_BASE=http://host.containers.internal:5237/checkin/v1/journeys/retrieve
+      - AUTH_URL=https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token
+      - CONCURRENCY=10
+      - DURATION=60s
+    # Uncomment to run with host network if needed
+    # network_mode: host
+

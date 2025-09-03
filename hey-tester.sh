@@ -1,10 +1,16 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-API_BASE="http://localhost:5237/checkin/v1/journeys/retrieve"
-AUTH_URL="https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token"
-TMP_TOKEN_FILE=".token.json"
-RESULTS_FILE="hey-results.log"
+API_BASE="${API_BASE:-http://localhost:5237/checkin/v1/journeys/retrieve}"
+AUTH_URL="${AUTH_URL:-https://dotrezapi.test.6e.navitaire.com/api/nsk/v2/token}"
+TMP_TOKEN_FILE="${TMP_TOKEN_FILE:-.token.json}"
+RESULTS_FILE="${RESULTS_FILE:-logs/hey-results.log}"
+PAYLOAD_GLOB="${PAYLOAD_GLOB:-payloads/payload*.json}"
+CONCURRENCY="${CONCURRENCY:-10}"
+DURATION="${DURATION:-2m}"
+METHOD="${METHOD:-POST}"
+
+mkdir -p "$(dirname "$RESULTS_FILE")"
 
 # Step 1. Fetch token
 echo "[INFO] Fetching API token..."
@@ -25,28 +31,30 @@ echo "[INFO] Token retrieved successfully."
 echo "[INFO] Starting hey tests..."
 rm -f "$RESULTS_FILE"
 
-for f in payload*.json; do
+shopt -s nullglob
+found=false
+for f in $PAYLOAD_GLOB; do
+  found=true
   echo "[INFO] Testing $f ..."
-  # Using hey with similar parameters to siege (c1 -r10 = 10 requests total)
-  # -n: number of requests, -c: number of concurrent requests
-
-  # Steady traffic for 5 minutes, 100 concurrent users: hey -z 5m -c 100 -q 20
-  # Burst test (10k total requests, 200 users): hey -n 10000 -c 200 -q 20
-  # -q 20 means each worker sends 20 req/s
-  hey -z 2m -c 10 \
+  hey -z "$DURATION" -c "$CONCURRENCY" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -m POST \
+    -m "$METHOD" \
     -D "./$f" \
     "$API_BASE" 2>&1 | tee -a "$RESULTS_FILE"
-  
-  # Add a separator between tests
   echo "----------------------------------------" >> "$RESULTS_FILE"
 done
+shopt -u nullglob
+
+if [[ "$found" == false ]]; then
+  echo "[WARN] No payloads found matching pattern: $PAYLOAD_GLOB"
+fi
 
 # Step 3. Extract benchmark stats
 echo
 echo "========== Benchmark Results =========="
 grep -E "Total|Slowest|Fastest|Average|Requests/sec|Total data" "$RESULTS_FILE" || echo "[WARN] No benchmark stats found."
 echo "======================================="
+
+
